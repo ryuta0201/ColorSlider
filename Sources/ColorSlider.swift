@@ -6,17 +6,17 @@
 //  The MIT License (MIT)
 //
 //  Copyright (c) 2015-Present Sachin Patel (http://gizmosachin.com/)
-//
+//    
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to deal
 //  in the Software without restriction, including without limitation the rights
 //  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 //  copies of the Software, and to permit persons to whom the Software is
 //  furnished to do so, subject to the following conditions:
-//
+//    
 //  The above copyright notice and this permission notice shall be included in all
 //  copies or substantial portions of the Software.
-//
+//    
 //  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 //  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 //  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -26,289 +26,322 @@
 //  SOFTWARE.
 
 import UIKit
+import Foundation
+import CoreGraphics
 
-/// The orientation in which the `ColorSlider` is drawn.
-public enum Orientation {
-	/// The horizontal orientation.
-	case horizontal
-	
-	/// The vertical orientation.
-	case vertical
-}
-
-///
-/// ColorSlider is a customizable color picker with live preview.
-///
-/// Inspired by Snapchat, ColorSlider lets you drag to select black, white, or any color in between.
-/// Customize `ColorSlider` and its preview via a simple API, and receive callbacks via `UIControlEvents`.
-///
-/// Use the convenience initializer to create a `.vertical` ColorSlider with a live preview that appears to the `.left` of it:
-/// ```swift
-/// let colorSlider = ColorSlider(orientation: .vertical, previewSide: .left)
-/// ```
-///
-/// You can create a custom preview view using the `ColorSliderPreviewing` protocol, or by subclassing `DefaultPreviewView`.
-/// To pass in a custom preview view, simply use the default initializer instead:
-/// ```swift
-/// let myPreviewView = MyPreviewView()
-/// let colorSlider = ColorSlider(orientation: .vertical, previewView: myPreviewView)
-/// ```
-///
-/// ColorSlider is a `UIControl` subclass and fully supports the following `UIControlEvents`:
-/// * `.valueChanged`
-/// * `.touchDown`
-/// * `.touchUpInside`
-/// * `.touchUpOutside`
-/// * `.touchCancel`
-///
-/// Once adding your class as a target, you can get callbacks via the `color` property:
-/// ```swift
-/// colorSlider.addTarget(self, action: #selector(ViewController.changedColor(_:)), forControlEvents: .valueChanged)
-///
-/// func changedColor(_ slider: ColorSlider) {
-/// 	var color = slider.color
-/// 	// ...
-/// }
-/// ```
-///
-/// Customize the appearance of ColorSlider by setting properties on the `gradientView`:
-/// ```swift
-/// // Add a border
-/// colorSlider.gradientView.layer.borderWidth = 2.0
-/// colorSlider.gradientView.layer.borderColor = UIColor.white
-///
-/// // Disable rounded corners
-/// colorSlider.gradientView.automaticallyAdjustsCornerRadius = false
-/// ```
-///
-/// ColorSlider uses the [HSB](https://en.wikipedia.org/wiki/HSL_and_HSV) color standard internally.
-/// You can set the `saturation` of your ColorSlider's `gradientView` to change the saturation of colors on the slider.
-/// See the `GradientView` and `HSBColor` for more details on how colors are calculated.
-///
-
-public class ColorSlider: UIControl {
-	/// The selected color.
+/// The main ColorSlider class.
+@IBDesignable final public class ColorSlider: UIControl {
+	/// The current color of the `ColorSlider`.
 	public var color: UIColor {
-		get {
-			return UIColor(hsbColor: internalColor)
-		}
-		set {
-			internalColor = HSBColor(color: newValue)
-			
-			previewView?.colorChanged(to: color)
-			previewView?.transition(to: .inactive)
-			
-			sendActions(for: .valueChanged)
-		}
+		return UIColor(hue: hue, saturation: saturation, brightness: brightness, alpha: 1)
 	}
 	
-	/// The background gradient view.
-	public let gradientView: GradientView
-	
-	/// The preview view, passed in the required initializer.
-	public let previewView: PreviewView?
-	
-	/// The layout orientation of the slider, as defined in the required initializer.
-	internal let orientation: Orientation
-	
-	/// The internal HSBColor representation of `color`.
-	internal var internalColor: HSBColor
-
-	@available(*, unavailable)
-	required public init?(coder aDecoder: NSCoder) {
-		fatalError("init(coder:) and storyboards are unsupported, use init(orientation:) instead.")
+	// MARK: Customization
+	/// The display orientation of the `ColorSlider`.
+	public enum Orientation {
+		/// Displays `ColorSlider` vertically.
+		case vertical
+		
+		/// Displays `ColorSlider` horizontally.
+		case horizontal
 	}
 	
-	// MARK: - Init
-	
-	/// - parameter orientation: The orientation of the ColorSlider.
-	/// - parameter side: The side of the ColorSlider on which to anchor the live preview.
-	public convenience init(orientation: Orientation = .vertical, previewSide side: DefaultPreviewView.Side = .left) {
-		// Check to ensure the side is valid for the given orientation
-		switch orientation {
-		case .horizontal:
-			assert(side == .top || side == .bottom, "The preview must be on the top or bottom for orientation \(orientation).")
-		case .vertical:
-			assert(side == .left || side == .right, "The preview must be on the left or right for orientation \(orientation).")
-		}
-		
-		// Create the preview view
-		let previewView = DefaultPreviewView(side: side)
-		self.init(orientation: orientation, previewView: previewView)
-	}
-	
-	/// - parameter orientation: The orientation of the ColorSlider.
-	/// - parameter previewView: An optional preview view that stays anchored to the slider. See ColorSliderPreviewing.
-	required public init(orientation: Orientation, previewView: PreviewView?) {
-		self.orientation = orientation
-		self.previewView = previewView
-		
-		gradientView = GradientView(orientation: orientation)
-		internalColor = HSBColor(hue: 0, saturation: gradientView.saturation, brightness: 1)
-		
-		super.init(frame: .zero)
-		
-		addSubview(gradientView)
-		
-		if let currentPreviewView = previewView {
-			currentPreviewView.isUserInteractionEnabled = false
-			addSubview(currentPreviewView)
-		}
-	}
-}
-
-/// :nodoc:
-// MARK: - Layout
-extension ColorSlider {
-	public override func layoutSubviews() {
-		super.layoutSubviews()
-		
-		gradientView.frame = bounds
-		
-		if let preview = previewView {
+	/// The orientation of the `ColorSlider`. Defaults to `.Vertical`.
+	public var orientation: Orientation = .vertical {
+		didSet {
 			switch orientation {
-			
-			// Initial layout pass, set preview center as needed
-			case .horizontal where preview.center.y != bounds.midY,
-			     .vertical where preview.center.x != bounds.midX:
-				
-				if internalColor.hue == 0 {
-					// Initially set preview center to the top or left
-					centerPreview(at: .zero)
-				} else {
-					// Set preview center from `internalColor`
-					let sliderProgress = gradientView.calculateSliderProgress(for: internalColor)
-					centerPreview(at: CGPoint(x: sliderProgress * bounds.width, y: sliderProgress * bounds.height))
-				}
-				
-			// Adjust preview view size if needed
-			case .horizontal where autoresizesSubviews:
-				preview.bounds.size = CGSize(width: 25, height: bounds.height + 10)
-			case .vertical where autoresizesSubviews:
-				preview.bounds.size = CGSize(width: bounds.width + 10, height: 25)
-				
-			default:
-				break
+			case .vertical:
+				drawLayer.startPoint = CGPoint(x: 0.5, y: 1)
+				drawLayer.endPoint = CGPoint(x: 0.5, y: 0)
+			case .horizontal:
+				drawLayer.startPoint = CGPoint(x: 0, y: 0.5)
+				drawLayer.endPoint = CGPoint(x: 1, y: 0.5)
 			}
 		}
 	}
 	
-	/// Center the preview view at a particular point, given the orientation.
-	///
-	/// * If orientation is `.horizontal`, the preview is centered at `(point.x, bounds.midY)`.
-	/// * If orientation is `.vertical`, the preview is centered at `(bounds.midX, point.y)`.
-	///
-	/// The `x` and `y` values of `point` are constrained to the bounds of the slider.
-	/// - parameter point: The desired point at which to center the `previewView`.
-	internal func centerPreview(at point: CGPoint) {
-		switch orientation {
-		case .horizontal:
-			let boundedTouchX = (0..<bounds.width).clamp(point.x)
-			previewView?.center = CGPoint(x: boundedTouchX, y: bounds.midY)
-		case .vertical:
-			let boundedTouchY = (0..<bounds.height).clamp(point.y)
-			previewView?.center = CGPoint(x: bounds.midX, y: boundedTouchY)
+	/// A boolean value that determines whether or not a color preview is shown while dragging.
+	@IBInspectable public var previewEnabled: Bool = false
+	
+	/// The width of the ColorSlider's border.
+	@IBInspectable public var borderWidth: CGFloat = 1.0 {
+		didSet {
+			drawLayer.borderWidth = borderWidth
 		}
 	}
-}
-
-/// :nodoc:
-// MARK: - UIControlEvents
-extension ColorSlider {
-	/// Begins tracking a touch when the user starts dragging.
-	public override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
-		super.beginTracking(touch, with: event)
-		
-		// Reset saturation to default value
-		internalColor.saturation = gradientView.saturation
-
-		update(touch: touch, touchInside: true)
-		
-		let touchLocation = touch.location(in: self)
-		centerPreview(at: touchLocation)
-		previewView?.transition(to: .active)
-		
-		sendActions(for: .touchDown)
-		sendActions(for: .valueChanged)
-		return true
-	}
 	
-	/// Continues tracking a touch as the user drags.
-	public override func continueTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
-		super.continueTracking(touch, with: event)
-		
-		update(touch: touch, touchInside: isTouchInside)
-		
-		if isTouchInside {
-			let touchLocation = touch.location(in: self)
-			centerPreview(at: touchLocation)
-		} else {
-			previewView?.transition(to: .activeFixed)
+	/// The color of the ColorSlider's border.
+	@IBInspectable public var borderColor: UIColor = UIColor.black {
+		didSet {
+			drawLayer.borderColor = borderColor.cgColor
 		}
-		
-		sendActions(for: .valueChanged)
-		return true
 	}
 	
-	/// Ends tracking a touch when the user finishes dragging.
-	public override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
-		super.endTracking(touch, with: event)
+	/// The corner radius of the ColorSlider.
+	/// seealso: setsCornerRadiusAutomatically
+	@IBInspectable public var cornerRadius: CGFloat = 0.0 {
+		didSet {
+			updateCornerRadius()
+		}
+	}
+
+	/// Whether the slider should automatically adjust its corner radius.
+	/// When this value is `true`, `cornerRadius` is ignored.
+	/// When this value is `false`, the `cornerRadius` is used.
+    @IBInspectable public var setsCornerRadiusAutomatically: Bool = true {
+        didSet {
+        	updateCornerRadius()
+        }
+    }
+    
+    // MARK: Internal
+	/// Internal `CAGradientLayer` used for drawing the `ColorSlider`.
+	private lazy var drawLayer: CAGradientLayer = {
+		let drawLayer = CAGradientLayer()
+		self.layer.insertSublayer(drawLayer, at: 0)
+		return drawLayer
+	}()
+
+	/// The hue of the current color.
+    private var hue: CGFloat = 0
+	
+	/// The saturation of the current color.
+	private var saturation: CGFloat = 1
+	
+	/// The brightness of the current color.
+    private var brightness: CGFloat = 1
+	
+	// MARK: Preview view
+	/// The color preview view. Only shown if `previewEnabled` is set to `true`.
+	private var previewView: UIView = UIView()
+	
+	/// The edge length of the preview view.
+	private let previewDimension: CGFloat = 30
+	
+	/// The amount that the `previewView` is drawn away from the `ColorSlider` bar.
+	private let previewOffset: CGFloat = 44
+	
+	/// The duration of the preview show or hide animation.
+	private let previewAnimationDuration: TimeInterval = 0.10
+	
+    // MARK: - Initializers
+	/// Creates a `ColorSlider` with a frame of `CGRect.zero`.
+	public init() {
+		super.init(frame: CGRect.zero)
+		commonInit()
+    }
+	
+	/// Creates a `ColorSlider` with a frame of `frame`.
+    public override init(frame: CGRect) {
+        super.init(frame: frame)
+        commonInit()
+	}
+	
+	/// Creates a `ColorSlider` from Interface Builder.
+    public required init?(coder aDecoder: NSCoder) {
+        super.init(coder: aDecoder)
+		commonInit()
+    }
+	
+	/// Sets up internal views.
+	public func commonInit() {
+		backgroundColor = UIColor.clear
+		
+		drawLayer.frame = layer.bounds
+		drawLayer.masksToBounds = true
+		drawLayer.borderColor = borderColor.cgColor
+		drawLayer.borderWidth = borderWidth
+		drawLayer.startPoint = CGPoint(x: 0.5, y: 1)
+		drawLayer.endPoint = CGPoint(x: 0.5, y: 0)
+		updateCornerRadius()
+		
+		// Draw gradient
+		let hues: [CGFloat] = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+		drawLayer.locations = hues.map({ (hue) -> NSNumber in
+			return NSNumber(floatLiteral: Double(hue))
+		})
+		drawLayer.colors = hues.map({ (hue) -> CGColor in
+			return UIColor(hue: hue, saturation: 1, brightness: 1, alpha: 1).cgColor
+		})
+		
+		previewView.clipsToBounds = true
+		previewView.layer.cornerRadius = previewDimension / 2
+		previewView.layer.borderColor = UIColor.black.withAlphaComponent(0.3).cgColor
+		previewView.layer.borderWidth = 1.0
+	}
+	
+    // MARK: - UIControl
+	/// Begins tracking a touch when the user drags on the `ColorSlider`.
+    public override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+        super.beginTracking(touch, with: event)
+		
+		// Reset saturation and brightness
+		saturation = 1.0
+		brightness = 1.0
+		
+        updateForTouch(touch, touchInside: true)
+		
+        showPreview(touch)
+        
+        sendActions(for: .touchDown)
+        return true
+    }
+	
+	/// Continues tracking a touch as the user drags on the `ColorSlider`.
+    public override func continueTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+        super.continueTracking(touch, with: event)
+        
+        updateForTouch(touch, touchInside: isTouchInside)
+		
+        updatePreview(touch)
+        
+        sendActions(for: .valueChanged)
+        return true
+    }
+	
+	/// Ends tracking a touch when the user finishes dragging on the `ColorSlider`.
+    public override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
+        super.endTracking(touch, with: event)
 		
 		guard let endTouch = touch else { return }
-		update(touch: endTouch, touchInside: isTouchInside)
+        updateForTouch(endTouch, touchInside: isTouchInside)
 		
-		previewView?.transition(to: .inactive)
+        removePreview()
 		
 		sendActions(for: isTouchInside ? .touchUpInside : .touchUpOutside)
+    }
+	
+	/// Cancels tracking a touch when the user cancels dragging on the `ColorSlider`.
+    public override func cancelTracking(with event: UIEvent?) {
+        sendActions(for: .touchCancel)
+    }
+	
+	// MARK: -
+	///	Updates the `ColorSlider` color.
+	///
+	///	- parameter touch: The touch that triggered the update.
+	///	- parameter touchInside: A boolean value that is `true` if `touch` was inside the frame of the `ColorSlider`.
+    private func updateForTouch(_ touch: UITouch, touchInside: Bool) {
+        if touchInside {
+            // Modify hue at constant brightness
+            let locationInView = touch.location(in: self)
+			
+			// Calculate based on orientation
+			if orientation == .vertical {
+				hue = 1 - max(0, min(1, (locationInView.y / frame.height)))
+			} else {
+				hue = max(0, min(1, (locationInView.x / frame.width)))
+			}
+            brightness = 1
+			
+        } else {
+            // Modify saturation and brightness for the current hue
+			guard let _superview = superview else { return }
+			let locationInSuperview = touch.location(in: _superview)
+			let horizontalPercent = max(0, min(1, (locationInSuperview.x / _superview.frame.width)))
+			let verticalPercent = max(0, min(1, (locationInSuperview.y / _superview.frame.height)))
+			
+			// Calculate based on orientation
+			if orientation == .vertical {
+				saturation = horizontalPercent
+				brightness = 1 - verticalPercent
+			} else {
+				saturation = verticalPercent
+				brightness = 1 - horizontalPercent
+			}
+        }
+    }
+	
+	/// Draws necessary parts of the `ColorSlider`.
+	private func layout(_ sublayer: CALayer, parent layer: CALayer) {
+		guard sublayer != previewView.layer else { return }
+		updateCornerRadius()
+		sublayer.frame = layer.bounds
 	}
 	
-	/// Cancels tracking a touch when the user cancels dragging.
-	public override func cancelTracking(with event: UIEvent?) {
-		sendActions(for: .touchCancel)
+	public override func layoutSublayers(of layer: CALayer) {
+		super.layoutSublayers(of: layer)
+		layer.sublayers?.forEach { layout($0, parent: layer) }
 	}
-}
 
-/// :nodoc:
-/// MARK: - Internal Calculations
-fileprivate extension ColorSlider {
-	/// Updates the internal color and preview view when a touch event occurs.
-	/// - parameter touch: The touch that triggered the update.
-	/// - parameter touchInside: Whether the touch that triggered the update was inside the control when the event occurred.
-	func update(touch: UITouch, touchInside: Bool) {
-		internalColor = gradientView.color(from: internalColor, after: touch, insideSlider: touchInside)
-		previewView?.colorChanged(to: color)
+	func updateCornerRadius() {
+		if setsCornerRadiusAutomatically {
+        	let shortestSide = (bounds.width > bounds.height) ? bounds.height : bounds.width
+        	drawLayer.cornerRadius = shortestSide / 2.0
+        } else {
+        	drawLayer.cornerRadius = cornerRadius
+        }
 	}
-}
-
-/// :nodoc:
-/// MARK: - Increase Tappable Area
-extension ColorSlider {
-	/// Increase the tappable area of `ColorSlider` to a minimum of 44 points on either edge.
-	override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-		// If hidden, don't customize behavior
-		guard !isHidden else { return super.hitTest(point, with: event) }
+    
+    // MARK: - Preview
+	///	Shows the color preview.
+	///
+	///	- parameter touch: The touch that triggered the update.
+    private func showPreview(_ touch: UITouch) {
+		if !previewEnabled { return }
 		
-		// Determine the delta between the width / height and 44, the iOS HIG minimum tap target size.
-		// If a side is already longer than 44, add 10 points of padding to either side of the slider along that axis.
-		let minimumSideLength: CGFloat = 44
-		let padding: CGFloat = -20
-		let dx: CGFloat = min(bounds.width - minimumSideLength, padding)
-		let dy: CGFloat = min(bounds.height - minimumSideLength, padding)
+        // Initialize preview in proper position, save frame
+        updatePreview(touch)
+		previewView.transform = minimizedTransform(for: previewView.frame)
+        
+        addSubview(previewView)
+        UIView.animate(withDuration: previewAnimationDuration, delay: 0, options: [.beginFromCurrentState, .curveEaseInOut], animations: { () -> Void in
+            self.previewView.transform = CGAffineTransform.identity
+		}, completion: nil)
+    }
+	
+	///	Updates the color preview.
+	///
+	///	- parameter touch: The touch that triggered the update.
+    private func updatePreview(_ touch: UITouch) {
+		if !previewEnabled { return }
 		
-		// If an increased tappable area is needed, respond appropriately
-		let increasedTapAreaNeeded = (dx < 0 || dy < 0)
-		let expandedBounds = bounds.insetBy(dx: dx / 2, dy: dy / 2)
+		// Calculate the position of the preview
+		let location = touch.location(in: self)
+		var x = orientation == .vertical ? -previewOffset : location.x
+		var y = orientation == .vertical ? location.y : -previewOffset
 		
-		if increasedTapAreaNeeded && expandedBounds.contains(point) {
-			for subview in subviews.reversed() {
-				let convertedPoint = subview.convert(point, from: self)
-				if let hitTestView = subview.hitTest(convertedPoint, with: event) {
-					return hitTestView
-				}
-			}
-			return self
+		// Restrict preview frame to slider bounds
+		if orientation == .vertical {
+			y = max(0, location.y - (previewDimension / 2))
+			y = min(bounds.height - previewDimension, y)
 		} else {
-			return super.hitTest(point, with: event)
+			x = max(0, location.x - (previewDimension / 2))
+			x = min(bounds.width - previewDimension, x)
 		}
-	}
+		
+		// Update the preview
+		let previewFrame = CGRect(x: x, y: y, width: previewDimension, height: previewDimension)
+		previewView.frame = previewFrame
+		previewView.backgroundColor = color
+    }
+	
+	/// Removes the color preview
+    private func removePreview() {
+		if !previewEnabled || previewView.superview == nil { return }
+		
+		UIView.animate(withDuration: previewAnimationDuration, delay: 0, options: [.beginFromCurrentState, .curveEaseInOut], animations: { () -> Void in
+			self.previewView.transform = self.minimizedTransform(for: self.previewView.frame)
+		}, completion: { (completed: Bool) -> Void in
+			self.previewView.removeFromSuperview()
+			self.previewView.transform = CGAffineTransform.identity
+		})
+    }
+	
+	///	Calculates the transform from `rect` to the minimized preview view.
+	///
+	///	- parameter rect: The actual frame of the preview view.
+	///	- returns: The transform from `rect` to generate the minimized preview view.
+    private func minimizedTransform(for rect: CGRect) -> CGAffineTransform {
+        let minimizedDimension: CGFloat = 5.0
+		
+		let scale = minimizedDimension / previewDimension
+		let scaleTransform = CGAffineTransform(scaleX: scale, y: scale)
+		
+		let tx = orientation == .vertical ? previewOffset : 0
+		let ty = orientation == .vertical ? 0 : previewOffset
+		let translationTransform = CGAffineTransform(translationX: tx, y: ty)
+		
+		return scaleTransform.concatenating(translationTransform)
+    }
 }
